@@ -4,8 +4,33 @@ import sys
 import time
 import subprocess
 import os
+import re
 from pathlib import Path
 from playwright.sync_api import sync_playwright
+
+def get_pulse_source():
+    """
+    利用可能な PulseAudio ソースを取得する
+    """
+    try:
+        result = subprocess.run(
+            ['pactl', 'list', 'short', 'sources'],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        sources = result.stdout.strip().split('\n')
+        if sources and sources[0]:
+            # 最初のソースのデバイス名を取得
+            source_name = sources[0].split()[1]
+            print(f"Found audio source: {source_name}")
+            return source_name
+        else:
+            print("No audio sources found, using 'default'")
+            return 'default'
+    except Exception as e:
+        print(f"Error detecting audio source: {e}")
+        return 'default'
 
 def capture_youtube(url, output_dir="/output", duration=60):
     """
@@ -30,6 +55,9 @@ def capture_youtube(url, output_dir="/output", duration=60):
     video_process = None
     audio_process = None
 
+    # 利用可能なオーディオソースを検出
+    audio_source = get_pulse_source()
+
     try:
         with sync_playwright() as p:
             browser = p.chromium.launch(
@@ -38,6 +66,8 @@ def capture_youtube(url, output_dir="/output", duration=60):
                     '--no-sandbox',
                     '--disable-dev-shm-usage',
                     '--autoplay-policy=no-user-gesture-required',
+                    '--enable-audio-service-sandbox=false',
+                    '--disable-features=AudioServiceOutOfProcess',
                 ]
             )
 
@@ -49,6 +79,21 @@ def capture_youtube(url, output_dir="/output", duration=60):
             page = context.new_page()
 
             page.goto(url, wait_until='domcontentloaded')
+
+            # YouTube の動画が読み込まれるまで待つ
+            time.sleep(3)
+
+            # 動画を再生（必要に応じて）
+            try:
+                play_button = page.locator('button.ytp-large-play-button')
+                if play_button.is_visible(timeout=2000):
+                    play_button.click()
+                    print("Clicked play button")
+            except Exception as e:
+                print(f"Play button not found or already playing: {e}")
+
+            # 少し待ってから録音開始
+            time.sleep(2)
 
             print("Starting screen capture (2 FPS JPEG)...")
             video_cmd = [
@@ -63,11 +108,11 @@ def capture_youtube(url, output_dir="/output", duration=60):
                 image_pattern
             ]
 
-            print("Starting audio recording...")
+            print(f"Starting audio recording from source: {audio_source}...")
             audio_cmd = [
                 'ffmpeg',
                 '-f', 'pulse',
-                '-i', 'default',
+                '-i', audio_source,
                 '-c:a', 'libmp3lame',
                 '-b:a', '192k',
                 '-t', str(duration),
@@ -92,8 +137,20 @@ def capture_youtube(url, output_dir="/output", duration=60):
             time.sleep(duration + 2)
 
             print("Waiting for processes to finish...")
-            video_process.wait(timeout=10)
-            audio_process.wait(timeout=10)
+            video_exit_code = video_process.wait(timeout=10)
+            audio_exit_code = audio_process.wait(timeout=10)
+
+            print(f"Screen capture exit code: {video_exit_code}")
+            print(f"Audio recording exit code: {audio_exit_code}")
+
+            # エラー出力を表示
+            if video_exit_code != 0:
+                _, stderr = video_process.communicate()
+                print(f"Screen capture error: {stderr.decode()}")
+
+            if audio_exit_code != 0:
+                _, stderr = audio_process.communicate()
+                print(f"Audio recording error: {stderr.decode()}")
 
             browser.close()
 
