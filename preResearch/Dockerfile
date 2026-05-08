@@ -6,15 +6,12 @@ ENV XDG_RUNTIME_DIR=/tmp/runtime
 RUN apt-get update && apt-get install -y \
     xvfb \
     x11-utils \
-    pipewire \
-    pipewire-pulse \
+    pulseaudio \
     pulseaudio-utils \
     ffmpeg \
     python3 \
     python3-pip \
     ca-certificates \
-    dbus \
-    dbus-x11 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
