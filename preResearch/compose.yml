@@ -8,3 +8,12 @@ services:
       YOUTUBE_URL: ${YOUTUBE_URL:?YOUTUBE_URL is required}
       DURATION: ${DURATION:-60}
     restart: "no"
+
+  web-viewer:
+    image: nginx:alpine
+    volumes:
+      - ./output:/usr/share/nginx/html:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "8080:80"
+    restart: unless-stopped
