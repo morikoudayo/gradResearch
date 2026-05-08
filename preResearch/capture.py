@@ -8,26 +8,7 @@ from datetime import datetime
 from playwright.sync_api import sync_playwright
 
 def capture_youtube(url, output_dir="/output"):
-    """YouTube動画を再生して広告が表示されている間だけキャプチャ"""
-    # 日時フォルダを作成
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_base = os.path.join(output_dir, timestamp)
-    output_path = output_base
-
-    # 重複する場合はサフィックスを追加
-    suffix = 1
-    while os.path.exists(output_path):
-        output_path = f"{output_base}-{suffix}"
-        suffix += 1
-
-    os.makedirs(output_path, exist_ok=True)
-    print(f"Capturing ads from {url} to {output_path}")
-
-    image_pattern = os.path.join(output_path, "frame_%04d.jpg")
-    audio_file = os.path.join(output_path, "audio.mp3")
-
-    video_process = None
-    audio_process = None
+    """YouTube動画を再生して広告が表示されるたびにキャプチャを繰り返す"""
 
     try:
         with sync_playwright() as p:
@@ -43,77 +24,115 @@ def capture_youtube(url, output_dir="/output"):
             )
 
             page = browser.new_page(viewport={'width': 1920, 'height': 1080})
-            page.goto(url, wait_until='domcontentloaded')
 
-            # 広告が表示されるまで待つ（タイムアウト10秒）
-            print("Waiting for ad to appear...")
-            try:
-                page.wait_for_selector('.ad-showing', timeout=10000)
-                print("Ad detected, starting capture...")
-            except Exception:
-                print("No ad found within 10 seconds, exiting")
-                browser.close()
-                return
+            print(f"Starting continuous ad capture from {url}")
 
-            video_cmd = [
-                'ffmpeg',
-                '-f', 'x11grab',
-                '-video_size', '1920x1080',
-                '-i', ':99',
-                '-vf', 'fps=2',
-                '-q:v', '2',
-                '-y',
-                image_pattern
-            ]
+            # 無限ループで広告を監視し続ける
+            while True:
+                video_process = None
+                audio_process = None
 
-            audio_cmd = [
-                'ffmpeg',
-                '-f', 'pulse',
-                '-i', 'virtual_speaker.monitor',
-                '-c:a', 'libmp3lame',
-                '-b:a', '192k',
-                '-y',
-                audio_file
-            ]
+                try:
+                    # ページを読み込む（初回または再読み込み）
+                    print("\nLoading page...")
+                    page.goto(url, wait_until='domcontentloaded')
 
-            video_process = subprocess.Popen(
-                video_cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
-            )
-            audio_process = subprocess.Popen(
-                audio_cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
-            )
+                    # 広告が表示されるまで待つ（タイムアウト10秒）
+                    print("Waiting for ad to appear...")
+                    try:
+                        page.wait_for_selector('.ad-showing', timeout=10000)
+                        print("Ad detected!")
+                    except Exception:
+                        print("No ad found, reloading page...")
+                        continue
 
-            # 広告が消えるまで待つ
-            print("Recording ad...")
-            page.wait_for_selector('.ad-showing', state='detached')
-            print("Ad finished, stopping capture...")
+                    # 日時フォルダを作成（広告が見つかった時点で）
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    output_base = os.path.join(output_dir, timestamp)
+                    output_path = output_base
 
-            # 録画を停止
-            video_process.terminate()
-            audio_process.terminate()
+                    # 重複する場合はサフィックスを追加
+                    suffix = 1
+                    while os.path.exists(output_path):
+                        output_path = f"{output_base}-{suffix}"
+                        suffix += 1
 
-            video_exit = video_process.wait(timeout=10)
-            audio_exit = audio_process.wait(timeout=10)
+                    os.makedirs(output_path, exist_ok=True)
+                    print(f"Saving to {output_path}")
 
-            if video_exit not in (0, -15):
-                print(f"Video capture failed: exit {video_exit}")
-            if audio_exit not in (0, -15):
-                print(f"Audio capture failed: exit {audio_exit}")
+                    image_pattern = os.path.join(output_path, "frame_%04d.jpg")
+                    audio_file = os.path.join(output_path, "audio.mp3")
+
+                    video_cmd = [
+                        'ffmpeg',
+                        '-f', 'x11grab',
+                        '-video_size', '1920x1080',
+                        '-i', ':99',
+                        '-vf', 'fps=2',
+                        '-q:v', '2',
+                        '-y',
+                        image_pattern
+                    ]
+
+                    audio_cmd = [
+                        'ffmpeg',
+                        '-f', 'pulse',
+                        '-i', 'virtual_speaker.monitor',
+                        '-c:a', 'libmp3lame',
+                        '-b:a', '192k',
+                        '-y',
+                        audio_file
+                    ]
+
+                    video_process = subprocess.Popen(
+                        video_cmd,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE
+                    )
+                    audio_process = subprocess.Popen(
+                        audio_cmd,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE
+                    )
+
+                    # 広告が消えるまで待つ
+                    print("Recording ad...")
+                    page.wait_for_selector('.ad-showing', state='detached')
+                    print("Ad finished, stopping capture...")
+
+                    # 録画を停止
+                    video_process.terminate()
+                    audio_process.terminate()
+
+                    video_exit = video_process.wait(timeout=10)
+                    audio_exit = audio_process.wait(timeout=10)
+
+                    if video_exit not in (0, -15):
+                        print(f"Video capture failed: exit {video_exit}")
+                    if audio_exit not in (0, -15):
+                        print(f"Audio capture failed: exit {audio_exit}")
+
+                    print("Capture complete, waiting for next ad...")
+
+                except KeyboardInterrupt:
+                    print("\nStopping capture...")
+                    break
+                except Exception as e:
+                    print(f"Error in capture loop: {e}")
+                    # エラーが起きても継続
+                    continue
+                finally:
+                    # プロセスのクリーンアップ
+                    for proc in [video_process, audio_process]:
+                        if proc and proc.poll() is None:
+                            proc.terminate()
 
             browser.close()
-            print("Capture complete")
+            print("Capture stopped")
 
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"Fatal error: {e}")
         raise
-    finally:
-        for proc in [video_process, audio_process]:
-            if proc and proc.poll() is None:
-                proc.terminate()
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
