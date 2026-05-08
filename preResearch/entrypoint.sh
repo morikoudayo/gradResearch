@@ -49,10 +49,19 @@ until pactl info >/dev/null 2>&1 || [ $RETRY -eq 10 ]; do
     sleep 0.5
 done
 
+# 仮想オーディオシンクを作成
+echo "Creating virtual audio sink..."
+pactl load-module module-null-sink sink_name=virtual_speaker sink_properties=device.description="Virtual_Speaker"
+
+# デフォルトシンクを設定
+pactl set-default-sink virtual_speaker
+
 # オーディオデバイスの確認
 echo "Checking audio devices..."
-pactl list short sinks || true
-pactl list short sources || true
+pactl list short sinks
+pactl list short sources
+echo "Default sink:"
+pactl get-default-sink
 echo "Pipewire ready"
 
 echo "Starting capture script..."

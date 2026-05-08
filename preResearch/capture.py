@@ -11,6 +11,7 @@ from playwright.sync_api import sync_playwright
 def get_pulse_source():
     """
     利用可能な PulseAudio ソースを取得する
+    仮想シンクのモニターを優先的に使用
     """
     try:
         result = subprocess.run(
@@ -20,8 +21,16 @@ def get_pulse_source():
             check=True
         )
         sources = result.stdout.strip().split('\n')
+
+        # 仮想シンクのモニターを探す
+        for source in sources:
+            if 'virtual_speaker.monitor' in source:
+                source_name = source.split()[1]
+                print(f"Found virtual speaker monitor: {source_name}")
+                return source_name
+
+        # 見つからなければ最初のソース
         if sources and sources[0]:
-            # 最初のソースのデバイス名を取得
             source_name = sources[0].split()[1]
             print(f"Found audio source: {source_name}")
             return source_name
