@@ -114,6 +114,9 @@ def capture_youtube(url, output_dir="/output"):
 
                     print("Capture complete, waiting for next ad...")
 
+                except (KeyboardInterrupt, SystemExit):
+                    # シグナル受信時はループを抜ける
+                    break
                 except Exception as e:
                     print(f"Error in capture loop: {e}")
                     # エラーが起きても継続
