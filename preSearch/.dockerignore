@@ -1,0 +1,9 @@
+output/
+*.mp4
+*.mkv
+*.avi
+__pycache__/
+*.pyc
+.git/
+.gitignore
+README.md
