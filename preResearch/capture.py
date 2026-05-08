@@ -4,15 +4,27 @@ import sys
 import subprocess
 import os
 from pathlib import Path
+from datetime import datetime
 from playwright.sync_api import sync_playwright
 
 def capture_youtube(url, output_dir="/output"):
     """YouTube動画を再生して広告が表示されている間だけキャプチャ"""
-    print(f"Capturing ads from {url} to {output_dir}")
+    # 日時フォルダを作成
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_base = os.path.join(output_dir, timestamp)
+    output_path = output_base
 
-    Path(output_dir).mkdir(parents=True, exist_ok=True)
-    image_pattern = os.path.join(output_dir, "frame_%04d.jpg")
-    audio_file = os.path.join(output_dir, "audio.mp3")
+    # 重複する場合はサフィックスを追加
+    suffix = 1
+    while os.path.exists(output_path):
+        output_path = f"{output_base}-{suffix}"
+        suffix += 1
+
+    os.makedirs(output_path, exist_ok=True)
+    print(f"Capturing ads from {url} to {output_path}")
+
+    image_pattern = os.path.join(output_path, "frame_%04d.jpg")
+    audio_file = os.path.join(output_path, "audio.mp3")
 
     video_process = None
     audio_process = None
