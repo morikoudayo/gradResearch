@@ -37,7 +37,7 @@ pactl list short sources
 
 echo "Starting capture script..."
 if [ -n "$YOUTUBE_URL" ]; then
-    python3 /app/capture.py "$YOUTUBE_URL" /output "${DURATION:-60}"
+    python3 /app/capture.py "$YOUTUBE_URL" /output
 else
     python3 /app/capture.py "$@"
 fi

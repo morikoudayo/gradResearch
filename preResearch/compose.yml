@@ -6,7 +6,6 @@ services:
       - ./output:/output
     environment:
       YOUTUBE_URL: ${YOUTUBE_URL:?YOUTUBE_URL is required}
-      DURATION: ${DURATION:-60}
     restart: "no"
 
   web-viewer:
