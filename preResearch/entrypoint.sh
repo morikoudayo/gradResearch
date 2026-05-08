@@ -36,11 +36,10 @@ pactl list short sinks
 pactl list short sources
 
 echo "Starting capture script..."
-if [ -n "$YOUTUBE_URL" ]; then
-    python3 /app/capture.py "$YOUTUBE_URL" /output
-else
-    python3 /app/capture.py "$@"
-fi
+trap "pulseaudio --kill 2>/dev/null || true; kill $XVFB_PID 2>/dev/null || true" EXIT
 
-pulseaudio --kill 2>/dev/null || true
-kill $XVFB_PID 2>/dev/null || true
+if [ -n "$YOUTUBE_URL" ]; then
+    exec python3 /app/capture.py "$YOUTUBE_URL" /output
+else
+    exec python3 /app/capture.py "$@"
+fi

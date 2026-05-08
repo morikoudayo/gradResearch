@@ -2,6 +2,7 @@ FROM ubuntu:22.04
 
 ENV DISPLAY=:99
 ENV XDG_RUNTIME_DIR=/tmp/runtime
+ENV PYTHONUNBUFFERED=1
 
 RUN apt-get update && apt-get install -y \
     xvfb \

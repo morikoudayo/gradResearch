@@ -114,9 +114,6 @@ def capture_youtube(url, output_dir="/output"):
 
                     print("Capture complete, waiting for next ad...")
 
-                except KeyboardInterrupt:
-                    print("\nStopping capture...")
-                    break
                 except Exception as e:
                     print(f"Error in capture loop: {e}")
                     # エラーが起きても継続
@@ -142,4 +139,8 @@ if __name__ == "__main__":
     url = sys.argv[1]
     output_dir = sys.argv[2] if len(sys.argv) > 2 else "/output"
 
-    capture_youtube(url, output_dir)
+    try:
+        capture_youtube(url, output_dir)
+    except KeyboardInterrupt:
+        print("\nStopped by user")
+        sys.exit(0)
