@@ -2,48 +2,38 @@
 
 set -e
 
-# ランタイムディレクトリを作成
+wait_for_service() {
+    local check_cmd="$1"
+    local service_name="$2"
+    local max_retries=10
+
+    echo "Waiting for $service_name..."
+    local retry=0
+    until eval "$check_cmd" >/dev/null 2>&1 || [ $retry -eq $max_retries ]; do
+        retry=$((retry + 1))
+        sleep 0.5
+    done
+    echo "$service_name ready"
+}
+
 mkdir -p $XDG_RUNTIME_DIR
 
 echo "Starting Xvfb..."
 Xvfb :99 -screen 0 1920x1080x24 -ac +extension GLX +render -noreset &
 XVFB_PID=$!
-
-# Xvfbの起動を確認
-echo "Waiting for Xvfb..."
-RETRY=0
-until xdpyinfo -display :99 >/dev/null 2>&1 || [ $RETRY -eq 10 ]; do
-    RETRY=$((RETRY + 1))
-    sleep 0.5
-done
-echo "Xvfb ready"
+wait_for_service "xdpyinfo -display :99" "Xvfb"
 
 echo "Starting PulseAudio..."
-pulseaudio --start --log-target=stderr &
-PULSEAUDIO_PID=$!
+pulseaudio --start --log-target=stderr
+wait_for_service "pactl info" "PulseAudio"
 
-# PulseAudioの起動を確認
-echo "Waiting for PulseAudio..."
-RETRY=0
-until pactl info >/dev/null 2>&1 || [ $RETRY -eq 10 ]; do
-    RETRY=$((RETRY + 1))
-    sleep 0.5
-done
-
-# 仮想オーディオシンクを作成
 echo "Creating virtual audio sink..."
-pactl load-module module-null-sink sink_name=virtual_speaker sink_properties=device.description="Virtual_Speaker"
-
-# デフォルトシンクを設定
+pactl load-module module-null-sink sink_name=virtual_speaker sink_properties=device.description="Virtual_Speaker" >/dev/null
 pactl set-default-sink virtual_speaker
 
-# オーディオデバイスの確認
-echo "Checking audio devices..."
+echo "Audio setup complete"
 pactl list short sinks
 pactl list short sources
-echo "Default sink:"
-pactl get-default-sink
-echo "PulseAudio ready"
 
 echo "Starting capture script..."
 if [ -n "$YOUTUBE_URL" ]; then
