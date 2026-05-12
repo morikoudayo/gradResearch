@@ -41,37 +41,52 @@ def capture_youtube(url, output_dir="/output"):
                     # 動画が終わるまで、広告が出るたびにキャプチャ
                     print("Watching video and monitoring for ads...")
                     while True:
-                        # 広告出現 or 動画終了を待つ
-                        result = page.evaluate("""
-                            () => new Promise(resolve => {
-                                const video = document.querySelector('video');
-                                if (!video) {
-                                    resolve('no_video');
-                                    return;
-                                }
-
-                                // 動画終了イベント
-                                video.addEventListener('ended', () => resolve('video_ended'), { once: true });
-
-                                // 広告出現を監視
-                                const checkAd = () => {
-                                    if (document.querySelector('.ad-showing')) {
-                                        resolve('ad_found');
+                        # 広告出現 or 動画終了を待つ（タイムアウト付き）
+                        try:
+                            result = page.evaluate("""
+                                () => new Promise((resolve, reject) => {
+                                    const video = document.querySelector('video');
+                                    if (!video) {
+                                        resolve('no_video');
+                                        return;
                                     }
-                                };
 
-                                // 初回チェック
-                                checkAd();
+                                    let resolved = false;
+                                    const doResolve = (value) => {
+                                        if (!resolved) {
+                                            resolved = true;
+                                            resolve(value);
+                                        }
+                                    };
 
-                                // MutationObserverで広告出現を監視
-                                const observer = new MutationObserver(checkAd);
-                                observer.observe(document.body, {
-                                    subtree: true,
-                                    attributes: true,
-                                    attributeFilter: ['class']
-                                });
-                            })
-                        """)
+                                    // タイムアウト（2秒ごとにPythonに制御を戻す）
+                                    setTimeout(() => doResolve('continue'), 2000);
+
+                                    // 動画終了イベント
+                                    video.addEventListener('ended', () => doResolve('video_ended'), { once: true });
+
+                                    // 広告出現を監視
+                                    const checkAd = () => {
+                                        if (document.querySelector('.ad-showing')) {
+                                            doResolve('ad_found');
+                                        }
+                                    };
+
+                                    // 初回チェック
+                                    checkAd();
+
+                                    // MutationObserverで広告出現を監視
+                                    const observer = new MutationObserver(checkAd);
+                                    observer.observe(document.body, {
+                                        subtree: true,
+                                        attributes: true,
+                                        attributeFilter: ['class']
+                                    });
+                                })
+                            """)
+                        except Exception:
+                            # タイムアウトやエラーの場合は継続
+                            result = 'continue'
 
                         if result == 'ad_found':
                             # 広告をキャプチャ
@@ -144,6 +159,9 @@ def capture_youtube(url, output_dir="/output"):
                         elif result == 'video_ended':
                             print("Video ended")
                             break
+                        elif result == 'continue':
+                            # タイムアウト、ループを継続してシグナルチェック
+                            continue
                         else:
                             print("Video element not found, skipping...")
                             break
