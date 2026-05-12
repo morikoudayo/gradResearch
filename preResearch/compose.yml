@@ -5,6 +5,7 @@ services:
     init: true
     volumes:
       - ./output:/output
+      - ./auth:/auth:ro
     environment:
       YOUTUBE_URL: ${YOUTUBE_URL:?YOUTUBE_URL is required}
     restart: "no"

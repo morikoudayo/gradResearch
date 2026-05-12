@@ -1,0 +1,19 @@
+# 認証情報（機密情報）
+auth/
+
+# 出力ディレクトリ
+output/
+
+# 環境変数
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# OS
+.DS_Store
+Thumbs.db

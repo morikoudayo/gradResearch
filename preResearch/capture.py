@@ -4,12 +4,26 @@ import sys
 import subprocess
 import os
 import random
+import json
 from pathlib import Path
 from datetime import datetime
 from playwright.sync_api import sync_playwright
 
-def capture_youtube(url, output_dir="/output"):
+def capture_youtube(url, output_dir="/output", auth_file="/auth/auth.json"):
     """YouTube動画を再生して広告をキャプチャし、動画を最後まで見て関連動画に移動"""
+    # 認証情報を読み込む
+    auth_data = None
+    auth_path = Path(auth_file)
+    if auth_path.exists():
+        try:
+            with open(auth_path, "r", encoding="utf-8") as f:
+                auth_data = json.load(f)
+            print(f"認証情報を読み込みました: {auth_file}")
+        except Exception as e:
+            print(f"認証情報の読み込みに失敗しました: {e}")
+    else:
+        print(f"認証ファイルが見つかりません: {auth_file}")
+
     with sync_playwright() as p:
         browser = p.chromium.launch(
             headless=False,
@@ -19,12 +33,34 @@ def capture_youtube(url, output_dir="/output"):
                 '--autoplay-policy=no-user-gesture-required',
                 '--enable-audio-service-sandbox=false',
                 '--disable-features=AudioServiceOutOfProcess',
+                '--disable-blink-features=AutomationControlled',
             ]
         )
 
-        page = browser.new_page(viewport={'width': 1920, 'height': 1080})
+        # コンテキストを作成（検知回避設定）
+        context = browser.new_context(
+            viewport={'width': 1920, 'height': 1080},
+            user_agent='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        )
+
+        # 認証情報があればクッキーを設定
+        if auth_data and "cookies" in auth_data:
+            context.add_cookies(auth_data["cookies"])
+            print("クッキーを設定しました")
+
+        page = context.new_page()
+
+        # WebDriverプロパティを削除（自動化検知回避）
+        page.add_init_script("""
+            Object.defineProperty(navigator, 'webdriver', {
+                get: () => undefined
+            });
+        """)
 
         print(f"Starting continuous ad capture from {url}")
+
+        # 初回フラグ（ローカルストレージ設定用）
+        first_load = True
 
         # 無限ループで広告を監視し続ける
         while True:
@@ -35,6 +71,19 @@ def capture_youtube(url, output_dir="/output"):
                 # ページを読み込む（初回または関連動画から）
                 print("\nLoading page...")
                 page.goto(url, wait_until='domcontentloaded')
+
+                # 初回のみローカルストレージを設定
+                if first_load and auth_data and "local_storage" in auth_data:
+                    try:
+                        for key, value in auth_data["local_storage"].items():
+                            page.evaluate(f"localStorage.setItem({json.dumps(key)}, {json.dumps(value)})")
+                        print("ローカルストレージを設定しました")
+                        # リロードして認証情報を反映
+                        page.reload(wait_until='domcontentloaded')
+                        first_load = False
+                    except Exception as e:
+                        print(f"ローカルストレージの設定に失敗: {e}")
+                        first_load = False
 
                 # 動画が終わるまで、広告が出るたびにキャプチャ
                 print("Watching video and monitoring for ads...")
@@ -188,6 +237,7 @@ def capture_youtube(url, output_dir="/output"):
                     if proc and proc.poll() is None:
                         proc.terminate()
 
+        context.close()
         browser.close()
         print("Capture stopped")
 
