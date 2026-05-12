@@ -2,6 +2,7 @@ services:
   youtube-capture:
     build: .
     image: youtube-capture
+    init: true
     volumes:
       - ./output:/output
     environment:
